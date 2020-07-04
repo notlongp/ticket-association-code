@@ -1,0 +1,245 @@
+---
+title: "<center> <h1>Ticket Sale Suggestion <br> A Case Study Using Association Rules</h1></center>"
+author: "<center>Lucas Pham</center>"
+date: "<center>6/28/2020</center>"
+output:
+  html_document: default
+  pdf_document: default
+indent: yes
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Marketing data is important because it helps executive officers understand the demographic of ticket buyers around the venue's area. By studying the insights of a given dataset from the trends shaped by the data, an analyst can bring about the best suggestions for the marketing team for effective advertisement. 
+  
+This study takes data from a local performing arts venue in Cleveland, Ohio. Although ticket buyers come from many different states in the US and Canada, this study will only focus on the tickets coming from the state of Ohio.
+  
+The goal of this case study is to understand what events are closely correlated based on each event's transactions. In order to achieve this goal, this report makes use of association rules modeling, namely Apriori algorithm and Eclat algorithm.
+  
+## Import data
+
+```{r warning=FALSE}
+df <- read.csv('main.csv', na.strings=c(""," ","NA"))
+summary(df)
+```
+
+## About the dataset
+
+The imported dataset, saved in RStudion Environment as dataframe df, is a 22352 x 8 matrix. In this matrix, each row represents a purchased ticket dated from summer 2019 to summer 2020, and each column represents a feature of those tickets, including the following: which event the ticket was from the date of purchase, the name of the customer (encoded as Customer.ID), the customer's address, sale location, and delivery method.
+
+As Event.ID, Customer.ID, and Postal.Code are categorical data, it is important to change their data types from numerical into categorical for grouping purposes. 
+  
+```{r warning = FALSE}
+df$Event.ID <- factor(df$Event.ID)
+df$Customer.ID <- factor(df$Customer.ID)
+df$Postal.Code <- factor(df$Postal.Code)
+```
+
+Before conducting any further analysis, I created a heatmap of Ohio divided by ZIP Code.
+  
+```{r fig.align = "center", warning = FALSE, message = FALSE}
+# install.packages("devtools")
+# install.packages('choroplethr')
+# install_github('arilamstein/choroplethrZip@v1.5.0')
+library(tidyverse)
+library(devtools)
+library(choroplethr)
+library(choroplethrZip)
+library(ggplot2)
+map_df <- as.data.frame(table(df$Postal.Code))
+colnames(map_df) <- c("region", "value")
+zip_choropleth(map_df, num_colors = 1,
+               state_zoom = "ohio",
+               title = "Ticket Sales Heatmap - Ohio") + 
+  coord_map() + 
+  scale_fill_distiller(name="Tickets", palette="Reds", trans = "reverse", na.value = "Grey")
+``` 
+
+## Method - Association Rules
+
+### Apriori
+
+Proposed by Agrawal and Srikant in 1994, Apriori algorithm is designed to operate on databases containing transactions (originally collections of items bought by customers) to count item sets efficiently with the goal of finding related elements. Like other association rules, Apriori finds all sets of items with a higher support value than a set minimum support and a higher confidence than the set minimum confidence. The lift is the ratio of the observed support to the expected support if each item were independent. The figure below, taken from [Dr. Saed Sayad's website]( http://www.saedsayad.com/association_rules.htm), represents it best:
+
+  <center><img src = "./figs/AR_1.png" />
+  
+### Eclat
+
+Eclat algorithm, or Equivalence Class Clustering and bottom-up Lattice Traversal algorithm, is a more efficient and scalable version derived from the Apriori algorithm. The main difference between the two is that, while Apriori algorithm runs Breath-First Search (BFS) of a graph, Eclat algorithm runs Depth-First Search (DFS). It is this vertical approach that makes Eclat execute faster than Apriori. In addition, Eclat algorithm differs from Apriori algorithm in that it only takes into account the support.
+  
+### Manipulate the dataset
+
+The dataframe 'df' is not appropriate to run Apriori algorithm. In order to fix this problem, I first created a new dataframe ardf to record every show that each customer bought ticket(s) for. This transformation will allow the new dataframe to run Apriori algorithm.
+
+```{r warning = FALSE}
+ardf <- data.frame(matrix(NA, 
+                            ncol = length(unique(df$Event.ID)) + 1, 
+                            nrow = length(unique(df$Customer.ID))))
+ardf$X1 <- sort(unique(df$Customer.ID))
+colnames(ardf)[1] <- 'Customer.ID'
+
+for (i in 1:5262){
+  events <- sort(unique(df[df$Customer.ID == i,'Event.ID']))
+  events <- c(events, rep('', 44 - length(events)))
+  ardf[i,] <- c(i, events)
+}
+
+head(ardf, 10)
+
+# Export the list as csv file
+write.table(ardf[,-1], 'list.csv', sep = ',', col.names = FALSE, row.names = FALSE)
+```
+
+### Package 'arules' and 'arulesViz'
+
+Package 'arules' allows the infrastructure to implement the frequent items and association rules mentioned in this report. Package 'arulesViz' provides various plotting techniques that are compatible with package 'arules'.
+
+```{r warning = FALSE, message = FALSE}
+# install.packages('arules')
+# install.packages('arulesViz')
+library(arules)
+library(arulesViz)
+dataset <- read.transactions('list.csv', sep = ',', rm.duplicates = TRUE)
+summary(dataset)
+```
+
+We can then plot out all 44 events' frequencies:
+
+```{r fig.height = 5, fig.width = 9, fig.align = "center", warning = FALSE}
+itemFrequencyPlot(dataset, topN = 44)
+```
+
+### Training and Visualizing Apriori Rule - Training 1
+
+Counting each customer as a 'transaction' with respect to the original example given by 'arules' vignette, there is a total of 5262 transactions. In this report, I ran each association rule twice, one with higher support and higher confidence and one with lower support and lower confidence. This enabled me to take into account groups of events that are closely related, as well as their connection to other shows.
+
+In this training, to calculate the support value, I fetched any show which had at least 200 tickets reserved. Therefore, the value of minimum support = 200/5262 = 0.03800836. I also set my initial minimum confidence at 80% (or 0.8).
+
+I can now use Apriori algorithm with the data:
+  
+```{r warning = FALSE}
+apriori_rule <- apriori(data = dataset, parameter = list(support = 0.03800836, confidence = 0.8, minlen = 2, maxlen = 44))
+```
+
+Top 10 associations (out of 171 rules) sorted by 'lift' (Apriori Rule):
+  
+```{r warning = FALSE}
+inspect(head(sort(apriori_rule, by = 'lift'), 10))
+```
+
+Matrix visualization:
+
+```{r fig.height = 11, fig.width = 9, fig.align = "center", warning = FALSE}
+plot(apriori_rule, method = 'grouped')
+```
+
+```{r warning = FALSE, fig.align = "center"}
+plotly_arules(apriori_rule)
+```
+
+### Training and Visualizing Apriori Rule - Training 2
+
+In this training, I extended the consideration range so Apriori algorithm fetched any show that had at least 50 tickets purchased; this limit differs from training 1 minimum of 200. Therefore, the current value of minimum support = 50/5262 = 0.00950209. In addition, I lowered the minimum confidence to 60% (or 0.6).
+
+I can now use Apriori algorithm with the data:
+
+```{r warning = FALSE}
+apriori_rule <- apriori(data = dataset, parameter = list(support = 0.00950209, confidence = 0.6, minlen = 2, maxlen = 44))
+```
+
+Top 10 associations (out of 195 rules) sorted by 'lift' (Apriori Rule):
+  
+```{r warning = FALSE}
+inspect(head(sort(apriori_rule, by = 'lift'), 10))
+```
+
+Matrix visualization:
+
+```{r fig.height = 11, fig.width = 9, fig.align = "center", warning = FALSE}
+plot(apriori_rule, method = 'grouped')
+```
+
+```{r warning = FALSE, fig.align = "center"} 
+plotly_arules(apriori_rule)
+``` 
+
+### Training and Visualizing Eclat Rule - Training 1
+
+In this training, I set the value of minimum support to 0.03800836, which is the same as the minimum support value from Apriori Training 1. I did so to allow for an easy comparison between this training and Apriori Training 1.
+
+```{r warning = FALSE}
+eclat_rule <- eclat(data = dataset, parameter = list(support = 0.03800836, minlen = 2, maxlen = 44))
+```
+
+Top 10 associations (out of 57 sets) sorted by support (Eclat Rule):
+  
+```{r warning = FALSE}
+inspect(head(sort(eclat_rule, by = "support"), 10))
+```
+
+Matrix visualization:
+
+```{r fig.height = 9, fig.width = 9, fig.align = "center", warning = FALSE}
+plot(eclat_rule, method = "graph")
+```
+
+### Training and Visualizing Eclat Rule - Training 2
+
+Similarly to Eclat Training 1, I set this training's minimum support value to 0.00950209, which is the same as Apriori Training 2's value.
+
+```{r warning = FALSE}
+eclat_rule <- eclat(data = dataset, parameter = list(support = 0.00950209, minlen = 2, maxlen = 44))
+```
+
+Top 10 associations (out of 73 sets) sorted by support (Eclat Rule):
+  
+```{r warning = FALSE}
+inspect(head(sort(eclat_rule, by = "support"), 10))
+```
+
+Matrix visualization:
+
+```{r fig.height = 9, fig.width = 9, fig.align = "center", warning = FALSE}
+plot(eclat_rule, method = "graph")
+```
+
+## Discussion
+
+Each of the trainings provide information that can build upon one another to find:
+
+Apriori Training 1 established close relationships between events #6, #10, #25, #32, #35, and #44; each event from the group of 6 is implied to be a consequent of a set of others within the group.Specifically, events #25 and #32 appear to be the top 2 highest consequents based on lift value.
+  
+After I lowered the support and confidence in Apriori Training 2, a new group consisting of events #8, #14, #28, and #33 seems to have an even higher lift than the group I specified in training 1. These high lift values imply that, even though the events in this group don't have the highest support values and confidences, their tickets are frequently bought together by customers, even more frequently than the events specified from training 1.
+
+Similarly to the group matrix from Apriori Training 1, the connected graph from Eclat Training 1 also represents a close relationship between events #6, #10, #25, #32, #35, and #44, further strengthening the conclusion that the event types are very similar, if not the same. 
+  
+Nonetheless, the data and graph generated from Eclat Training 2 provided me with the most information. Firstly, the graph confirmed there is a tight relationship between six events from group 1 as these 6 events are clustered together. Next, the group consisting of events #8, #14, #28, and #33 is also related pairwise and in groups of 3. Thirdly, new relationships between events #2, #9, #39 and event #13 was discovered in this training. Lastly, events #41 and #42 are not only independently related but are also related to event #13 as a pair. These findings are summarized and validated below.
+
+From all 4 trainings, there are 4 distinct groups of closely-related events:
+
+* Group 1: #6, #10, #25, #32, #35, #44 
+* Group 2: #8, #14, #28, #33
+* Group 3: #2, #9, #13, #39
+* Group 4: #41, #42
+        
+Cross-checking these Event.IDs with the nature of each event, I can see the connection within the nature of each group of events:
+
+* All events from Group 1 are book events featuring famous novelists, which attract avid readers and aspiring writers.
+* All events from Group 2 are academic lectures and talks hosted by famous public figures ( doctors, artists, scientists, etc.), which attracts scholars and students.
+* All events from Group 3 are harmonies of classical instrumental artists and bands, which attracts classical music listeners.
+* Two events from Group 4 are related, back-to-back events. These are essentially one event split into two.
+  
+Apriori algorithm is a better algorithm for bigger datasets. For the original dataset, Eclat algorithm is more straightforward, creates more insights, and takes significantly less time to execute due to the smaller number of calculations. The graph generated using Eclat algorithm Training #2 is especially intuitive because it presents clearly which groups of events are frequently bought with one another.
+  
+On top of this result, events such as #1, #17, and #18 are also harmonies composed by classical instrumental artists, yet the relationship between them and events of group 3 is not significant enough to be considered. This leads me to believe that better marketing advertisements can be done to connect classical music listeners who attended events of group 3 to purchase tickets from event #1, #17, and #18 as well.
+  
+## Acknowledgements
+
+Great thanks to the developers who created packages 'arules' and 'arulesViz' for providing the code that utilizes Apriori and Eclat algorithm intuition. 
+
+Also special thanks to Alia Basar for her help in compiling this case study.
+
