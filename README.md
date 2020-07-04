@@ -5,15 +5,15 @@ Marketing data is important because it helps executive officers understand the d
 ## About the data
 This study takes data from a local performing arts venue in Cleveland, Ohio. Although ticket buyers come from many different states in the US and Canada, this study will only focus on the tickets coming from the state of Ohio.
   
-## Goal
+## Goals
 The goal of this case study is to understand what events are closely correlated based on each event's transactions. In order to achieve this goal, this report makes use of association rules modeling, namely Apriori algorithm and Eclat algorithm.
 
-## Method
+## Methods
 Counting each customer as a 'transaction' with respect to the original example given by 'arules' vignette, there is a total of 5262 transactions. In this report, I ran each association rule twice, one with higher support and higher confidence and one with lower support and lower confidence. This enabled me to take into account groups of events that are closely related, as well as their connection to other shows.
 
 For this case study, I ran 4 trainings, 2 for each algorithm (Apriori and Eclat). For Apriori algorithm, I set a minimum support value of 200/5262 with 80% minimum confidence for the first training and a minimum support value of 50/5262 with 60% minimum confidence for the second training. For Eclat algorithm, I set a minimum support value of 200/5262 and 50/5262 for the first and second training, respectively.
   
-## Result
+## Results
 From all 4 trainings, there are 4 distinct groups of closely-related events:
 - Group 1: #6, #10, #25, #32, #35, #44 
 - Group 2: #8, #14, #28, #33
