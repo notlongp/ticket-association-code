@@ -1,4 +1,5 @@
 # Ticket Sale Suggestion - A Case Study Using Association Rules
+Link to the report can be find [here](https://notlongp.github.io/ticket-association/)
 ## Introduction
 Marketing data is important because it helps executive officers understand the demographic of ticket buyers around the venue's area. By studying the insights of a given dataset from the trends shaped by the data, an analyst can bring about the best suggestions for the marketing team for effective advertisement. 
   
